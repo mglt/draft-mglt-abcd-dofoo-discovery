@@ -1,0 +1,443 @@
+---
+title: Signaling filtering policies by the resolver
+abbrev: filtering policies by the resolver
+docname: draft-mglt-abcd-dofoo-discovery
+
+
+area: operational
+wg: dnsop
+kw: Internet-Draft
+cat: info
+
+coding: us-ascii
+pi:
+  rfcedstyle: yes
+  toc: yes
+  tocindent: yes
+  sortrefs: yes
+  symrefs: yes
+  strict: yes
+  comments: yes
+  inline: yes
+  docmapping: yes
+
+author:
+      -
+        ins: D. Migault
+        name: Daniel Migault
+        org: Ericsson
+        street: 8275 Trans Canada Route
+        city: Saint Laurent, QC
+        code: 4S 0B6
+        country: Canada
+        email: daniel.migault@ericsson.com
+
+--- abstract
+
+This document describes a mechanisms that enables a DNS client to discover
+other DNS alternatives such as DoT or DoH for one specific domain. This
+document also extends this discovery mechanism to an Internet wide of open
+resolvers search. though this is expected to be described further in a separate
+document. While search are always initiated by the DNS client, this document
+also indicates how a resolver MAY indicate a DNS client its preference for
+using alternative flavors of transport layer.  
+
+--- middle
+
+
+# Requirements Notation
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+"SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+"OPTIONAL" in this document are to be interpreted as described BCP 14
+{{!RFC2119}} {{!RFC8174}} when, and only when, they appear in all
+capitals, as shown here.
+
+# Introduction {#sec-intro}
+
+# Discovery mechanism associated to one domain
+
+The discovery mechanism is intended to enable a DNS client to discover
+what are the resolvers options available to him as well as how the DNS
+client can establish a session with that resolver. 
+
+The procedure is based on service discovery {{!RFC8145}} and the overall
+procedure consists in finding various instances of the service "rdns". The
+service designated as "rdns" differs from the service "domain" defined by IANA,
+as domain is assigned a specific port as well as two specific transports TCP
+and UDP and concerns resolving as well as authoritative servers. On the other
+hand the service "rdns" is expected to represent the resolution service that
+can have various transport flavors including using different ports and is
+limited to resoling servers.
+
+In this document, the service "rdns" is associated to a domain such as
+example.com. This means that the discovery process is performed over a specific
+portion of the internet, and resolvers that have no relation to that domain are
+not expected to be found. It is expected that the domain may be provisioned as
+a configuration parameter in the DNS client. It is expected that the domain
+provides a good meaning of the administrative entity managing the resolver, as
+it reflects the trust/mistrust the end user puts in the resolution. This
+configuration parameters differs from the one that is currently provisioned and
+discussion on how to proceed to resolver discovery from a legacy provisioning
+is described in more details in {{ip2d}}.
+
+The DNS client then searches for the rdns service associated to the domain
+example.com by querying PTR RRsets associated to _rdns_udp.example.com. This
+query corresponds to the general case of DNS service discovery. While tcp is
+reserved for TCP only and DNS is not only running on top of TCP we use _udp as a
+representation of _srv. 
+
+The difference with service discovery is that the response is expected to
+return instances of the service type. These instances may offer completely
+different services, but the end user is expected to select them according to
+their human readable name. In our case, the _rdns service type can be
+implemeneted into different sub services types that is in our cases (DOT, DOH
+DNS). DOT, DOH and DNS are only example and any other designation may have been
+provided. Possible ways to distinguish these services could have been to adopt
+a convention in the service instance names or to have a defined values for the
+service names. We prefer not to take that path and provide any constraints on
+the service name as this is the part that usually appears to the end user, and
+we want to leave it free to contain what is going to be meaniful for the end
+user. Instead we used the DNS-SD capabilities to specify sub services by
+prefixing with _dot, _doh and _dns53 the dns._udp service type.   
+
+
+~~~
+DNS client  -->    Resolver
+_rdns.example.com PTR ?
+
+            <--
+_rdns_udp.example.com PTR DOT._dot._sub._rdns._udp.example.com
+_rdns_udp.example.com PTR DOH._doh_sub._rdns._udp.example.com
+_rdns_udp.example.com PTR DNS._dns53_sub._rdns._udp.example.com
+
+~~~
+
+Note that "DOT", "DOH" and "DNS" are the strings that may be shown to the end
+user. The main difference with DNS-SD is that the sub type was initially
+designed so the end user can narrow down its search. More explicitly its
+purpose was to enable an end user to narrow down the search on services
+providing DNS resolution over HTTPS with _doh._sub._rdns._udp.example.com. The
+purpose was not to split a generic service into multiple sub types of services. 
+
+Note that the user interface is expected to interpret and present to the end
+user the different services by interpreting the _dot, _doh or _dns53 sub
+service types and easing the understanding of the end user. If the DNS client
+is implementing a speciifc configuration, it will also have to interprete the
+sub types according to the configuration of the end user.
+
+Now that the end user has the various services available ("DOH", "DOT" and
+"DNS") with there associated types, the selection can occur, and the DNS client
+can request additional information about the service itself to set up a session
+with the chosen service. In our case this is mostly the host name, ports, the
+ip address, the certificates, .... If the DNS client choses to use DoH, for
+example, it will request the SRV RRsets associated to that service.
+
+Note that in our case, the sub service type carries sufficient information and
+no additional information is needed. There is no need to request the TXT
+reccord. Note also that carrying the sub type into the TXT RRsets would not be
+appropriated as this is believe to be a sufficiently important information to
+prevent a DNS client to browse thought all the different service instances. 
+
+It is expected these exchanges are protected with DNSSEC as these could be
+performed over an untrusted channel as well as a semi trusted resolver. The
+additional section SHOULD also carry the necessary information to set up the
+session between the DNS client and the resolver. This includes the IP addresses
+(RRsets of type A and AAAA), for services implemented over TLS the necessary
+security credentials (TLSA RRsets).   
+
+~~~
+DNS client  -->    Resolver
+DOH._doh_sub._rdns._udp.example.com SRV ?
+            <--
+DOH._doh_sub_rdns.example.com SRV priority=0, weight=0, 
+                           port=443 host=resolver.example.com 
+DOH._doh_sub_rdns.example.com SRV priority=0, weight=1, 
+                           port=443 host=resolver.example.com 
+DOH._doh_sub_rdns.example.com RRSIG (SRV) <signature>
+resolver.example.com AAAA <ip6_address>
+resolver.example.com AAAA <ip6_address>
+resolver.example.com RRSIG (A) <signature>
+resolver.example.com TLSA <certificate>
+resolver.example.com RRSIG (TLSA) <signature>
+~~~
+
+
+
+
+
+## infering domain from resolvers IP address {#ip2d}
+
+When an application such as an web browser has a DNS client as part of its
+components, the configuration of that DNS client can be part of the application
+configuration. In such case, the domain may be provisioned in the configuration
+either by the software vendor or manually by the end user. On the other hand, a
+non negligible part of the systems the resolver is automatically provided by
+the network and designated by an IP address {{!RFC3646}}. In such cases, there
+is a need to derive the domain associated to that domain name. 
+
+This section describe a procedure that is performed by the DNS client to derive
+the domain from the IP address. It is also expected that resolver adapt their
+naming convention so that the procedure works. More precisely, the domain will
+be derived from the IP address by:
+ 
+1. performing a reverse resolution 
+
+2. assuming the resulting FQDN is composed
+of a hostname and the domain name.  For example, if resolver.example.com is the
+resulting FQDN from the reverse resolution, then the domain will be
+example.com. 
+
+# Resolver advertising other service sub type
+
+A resolver receiving a DNS request over a service sub type MAY be willing to
+advertise the DNS client that other sub service type are available. This is
+especially useful, when, for example, a resolver wants that the DNS resolver
+switches to other service sub types that are more secure. 
+
+In order to do so the resolver MAY provide in the additional data field the
+appropriated SRV RRsets. As an example, if the resolver wants to advertise the
+existence of resolver using dot or doh sub service type, the resolver would add
+the following RRsets. Additional RRSets such as A, AAAA or TLSA RRSets MAY also
+be added.  
+
+~~~
+DOH._doh._sub_rdns.example.com SRV priority=0, weight=0, 
+                                 port=443 host=resolver.example.com 
+DOH._doh._sub_rdns.example.com SRV priority=0, weight=1, 
+                                 port=443 host=resolver.example.com 
+DOH._doh._sub_rdns.example.com RRSIG (SRV) <signature>
+DOT._dot._sub_rdns.example.com SRV priority=0, weight=0, 
+                                 port=443 host=resolver.example.com 
+DOT._dot._sub_rdns.example.com SRV priority=0, weight=1, 
+                                 port=443 host=resolver.example.com 
+DOT._dot._sub_rdns.example.com RRSIG (SRV) <signature>
+~~~
+
+
+# Migration to service sub types
+
+The principle of the discovery mechanism is that the resolver indicates the
+available service sub types and let the DNS client chose which sub type it
+prefers. On the other hand, the resolver MAY also indicate a preference using
+the priority and weight fields however, there is no mechanisms that could
+permit an indirection from one service sub type to another service sub type.
+Redirection MAY especially be needed when a DNS client is using the dns53 sub
+type and the resolver would liek to upgrade the DNS client session to a more
+secure session. The MAY require a specific ERROR code that will request the DNS
+client to perform service discovery.  
+
+It is expected that dns53 sub type MUST always be provided to perform resolver
+discovery. In other words, resolver discovery MUST be available though the non
+confidential channels designated by the sub service type dns53. However, this
+does not mean that a resolver is expected to implement the dns53 sub type
+service for resolutions. The availability of the sub service types for
+resolution. If a resolver chose not to provide the dns53 sub service type, that
+service MUST NOT be pointed by the _rdns.example.com search. 
+
+# Service discovery over the Internet 
+
+THIS SECTION NEEDS PROBABLY TO THE TOPIC OF A DEDICATED DRAFT. 
+
+The draft discribes a search mechanism over a single domain. This is mostly
+useful for one resolver to anounce availability of other sub service types as
+well as for resolver to discover available alternatives. However, this requires
+the knowledge of a domain. The domain can be provisionned out-of band and
+results from a configuration setting. In the case of local scope resolver, it
+can also be derived from a provisioned IP address. This section aims at
+extending the ability of one DNS client to learn about the different available
+domain on the Internet. This section will list open resolvers that are
+available.
+
+The mechanism involves the creation of a special domain name rdns.arpa that
+will list the various rdns domains. This mechanism remains valid as long as the
+list of rdns domain name remains relatively limited. The number of rdns_domain
+that can fit into a payload will depend on the size of the rnds domain, so rdns
+domains are expected to have limited length, however the compactness is not
+expected to match the one achieved for the root servers that are designated by
+a one character size identity. The reason for it is that the identity of the
+resolver is expected to carry some meaning to the DNS client as opposed to the
+root servers. 
+
+That said, a UDP packet of 4096 bytes is expected to contain a significant
+amount of resolvers. The number of open resolver is not expected to reach that
+limit and if so the list can be retrieved through TCP. 
+
+The traffic associated to that domain is expected to be limited as most
+applications are expected to be provisioned with that RRset.   
+
+~~~
+b._rdns.rdns.arpa  PTR rdns_domain0
+b._rdns.rdns.arpa  PTR rdns_domain1
+~~~
+
+
+
+TBD:
+* IANA procedure to register
+* criterias that needs to be met to appear in the list
+
+QUESTION:
+* Do we need to add some criteria for the search ?
+
+# Security Considerations
+
+## Use of protected channel is RECOMMENDED
+
+When provided, it is recommended to chose a protected version of the rdns
+service. More specifically, the use of end-to-end protection ensures that the
+DNS client is connected to the expected platform and that its traffic cannot be
+intercepted on path. Typically, the selection of resolver on the Internet (and
+not on your ISP network) and the use of a non protected channel enables an
+attacker to monitor your DNS traffic. The similar observation remains true if
+you are connected to the resolver of your ISP. The use of a protected channel
+is recommended as it will prevent anyone on path to monitor your traffic.
+Trusting your ISP is mandatory in any case, but the associated level of trust
+with an protected channel is restricted to the operation of the DNS platform.
+With non protected channel the trust is extended to any segment between the DNS
+client and the resolver, which is consequently larger.   
+
+
+## DNSSEC is RECOMMENDED
+
+The exchanges SHOULD be protected with DNSSEC to ensure integrity of the
+information between the authoritative servers and the DNS client. Without
+DNSSEC protection, DNS messages may be tempered typically when then are
+transmitted over an unprotected channel either between the DNS client and the
+resolver or between the resolver and the authoritative servers. The messages
+may be tampered by an online attacker intercepting the messages or by the
+intermediary devices. It is important to realize that protection provided by
+TLS is limited to the channel between the DNS client and the resolver. There
+are a number of cases were the trust in the resolver is not sufficient which
+justify the generalization of the use of DNSSEC. The following examples are
+illustrative and are intended to be exhaustive.  
+
+First, the discovery exchanges may happen over an unprotected channel, in which
+case, the messages exchanged by the may be tempered by anyone on-path between
+the DNS client and the resolver as well as between the resolver and the
+authoritative servers - including the resolver. When TLS is used between the
+DNS client and the resolver, this does not necessarily means the DNS client
+trusts the resolver. Typically, the TLS session may be established with a
+self-signed certificate in which case the session is basically protected by a
+proof-of-ownership. In other cases, the session may be established based on
+Certificate Authorities (CA) that have been configured into the TLS client, but
+that are not necessarily trusted by the DNS client. In such cases, the
+connected resolver may be used to discover resolvers from another domain. In
+this case, the resolver is probably interacting with authoritative servers
+using untrusted and unprotected channels. Integrity protection relies on DNSSEC.    
+
+## TLSA is RECOMMENDED
+
+When TLS is used to protect the DNS exchanges, certificates SHOULD be provided
+or fingerprint in order to implement trust into the communication between the
+DNS client and the resolver. TLS session and the association of the private key
+to a specific identity can be based on two different trust model. The Web PKI
+that will rely on CA provisioned in the TLS library or the TA provided to the
+DNS client. A DNS client SHOULD be able to validate the trust of a TLS session
+based on the DNSSEC trust model using DANE. 
+
+When the DNS client is protecting its session to the resolver via TLS, the DNS
+client may initiate an TLS session that is not validated by a CA or a TLSA
+RRsets. The DNS client MUST proceed to the discovery process and validate the
+used certificate match the TLSA RRset. In case of mismatch the DNS client MUST
+abort the session.    
+  
+
+# Privacy Considerations
+
+When the discovery protocol is performed using a resolver that belongs to one
+domain for another domain, or over an unprotected channel, the DNS client must
+be conscious that its is revealing to the resolver its intention to use another
+resolver. More specifically, if an resolver is complying some legal
+requirements that DNS traffic must be unencrypted, using this resolver to
+perform a resolver discovery reveals the intention of potentially using
+alternative resolvers. Alternatively, performing narrowing down the discovery
+over a specific sub type of resolver (DoT, or DoH) may reveal to that resolver
+the type of communication. As result, when performing a discovery over a domain
+that differs to the domain the resolver belongs to, it is RECOMMENDED to
+request the SRV RRsets associated to all different sub type of proposed
+services. 
+
+Switching completely to a discovered resolver right proceeding to a discovery
+process provides an indication of switching as well as an indication to the
+resolver the DNS client is switching to. It is hard to make that switch
+unnoticed to the initial resolver and the DNS resolver MUST assume this will be
+noticed. The information of switching may be limited by sharing the traffic
+between different resolvers, however, the traffic pattern associated to each
+resolver may also reveal the switch. In addition, when the initial resolver is
+provided by the ISP, the ISP is also able to monitor the IP traffic and infer
+the switch. As a result, the DNS client SHOULD assume the switch will be
+detected. 
+
+With DoT or DoH, the selection of port 443 will make the traffic
+indistinguishable from HTTPS traffic. This means that an observer will not be
+able to tell whether the traffic carries web traffic or DNS traffic. Note that
+it presents an interest if the server offers both a web service as well as a
+resolution service. Note that many resolvers have a dedicated IP address for
+the resolution service, in which case, the information will be inferred from
+the IP address. Note also that traffic analysis may inferred this as well.
+Typically suppose an IP address hosts one or multiple web sites that are not
+popular as well as a resolving. If this IP address is associated frequent
+exchanges, it is likely that these exchanges will be DNS exchanges rather than
+Web traffic. The size of the packet may also be used as well as many other
+patterns. As a result, the use port 443 to hide the DNS traffic over web
+traffic depends on the resolver and 100% bullet proofed. 
+
+# IANA Considerations
+
+This document requests the IANA the creation of a new service name in the 
+Service Name and Transport Protocol Port Number Registry
+https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xml
+
+Fields Port Number, Transport Protocol, Assignee, Contact, Modification Date,
+Service Unauthorized Use Report, Assignment Notes are void.  
+
+~~~
+Service | Description    | Registration | Reference | 
+Name    |                | Date         |           |
+--------+----------------+--------------+-----------+
+rdns    | DNS resolution |  TBD1        | RFC-TBD   |
+
+~~~
+
+This document requests the IANA the creation of the following underscored node names in the 
+Underscored and Globally Scoped DNS Node Names registry
+https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-14
+
+~~~
+RR Type | _NODE NAME | Reference 
+--------+------------+----------
+SRV     | _rdn       | RFC-TBD
+SRV     | _dot       | RFC-TBD
+SRV     | _doh       | RFC-TBD
+SRV     | _dns53     | RFC-TBD
+~~~
+
+# Appendix
+
+Example of a file.
+
+~~~
+_rdns_udp.example.com PTR DOT._dot._sub._rdns._udp.example.com
+_rdns_udp.example.com PTR DOH._doh_sub._rdns._udp.example.com
+_rdns_udp.example.com PTR DNS._dns53_sub._rdns._udp.example.com
+
+_dot_sub_rdns.example.com PTR DOT._dot_sub_rdns._udp.example.com
+_doh_sub_rdns.example.com PTR DOH._doh_sub_rdns._udp.example.com
+_dns53_sub_rdns.example.com PTR DNS._dns53_sub_rdns._udp.example.com 
+
+DOT._dot_sub_rdns.example.com SRV port=443 host=dns.example.com
+DOT._dot_sub_rdns.example.com SRV port=53 host=dns.example.com
+DOH._dot_sub_rdns.example.com SRV port=443 host=dns-dot.example.com
+DNS._dns53_sub_rdns.example.com SRV port=53 host=dns53.example.com
+
+dns.example.com AAAA
+dns.example.com TLSA
+dns.example.com RRSIG
+
+dns53.example.com AAAA
+dns53.example.com RRSIG 
+~~~
+
+
+
