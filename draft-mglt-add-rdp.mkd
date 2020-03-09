@@ -1,11 +1,11 @@
 ---
 title: DNS Resolver Discovery Protocol (RDP)
 abbrev: RDP
-docname: draft-mglt-dprive-add-dofoo-discovery-00
+docname: draft-mglt-add-rdp-00
 
 
-area: operational
-wg: dnsop
+area: ART
+wg: add
 kw: Internet-Draft
 cat: info
 
@@ -187,7 +187,7 @@ the brand or legal entity of the institution the end user sends its data
 to. The rdns domain follows some DNS encoding rules and as such may not be
 believed to be so user friendly. Typically, the rdns domain might be
 ericsson.com or ericsson which is different from Ericsson (with
-appropriated police character and colour) which is probably what would be
+appropriated police character and color) which is probably what would be
 more meaningful for the end user. On the other hand, the end user may also
 be familiar with that format and the use or a standardize format helps
 automation in the selection. As a result, this document will assume that
@@ -222,7 +222,7 @@ time and already existing protocol. However, RDP differs from DNS SD in
 that DNS-SD discovers services within a specific domain (such as .local or
 .home.arpa for example) while RDP needs to discover the rdns domain as well
 as the resolving services (i.e. resolvers) associated to this domain. In
-addition, RDP is taking advanatge of teh latests development of SRVCB
+addition, RDP is taking advantage of the latests development of SRVCB
 RRsets {{!I-D.ietf-dnsop-svcb-httpssvc}} which, among other things, enables
 to combine the SRV and TXT Rsets. While nothing prevents RDP to use SRV and
 TXT RRsets, RDP uses instead SVCB RRset as web browser are more likely to
