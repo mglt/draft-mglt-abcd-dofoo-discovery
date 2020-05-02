@@ -1,7 +1,7 @@
 ---
-title: DNS Resolver Discovery Protocol (RDP)
-abbrev: RDP
-docname: draft-mglt-add-rdp-00
+title: DNS Resolver Discovery Protocol (DRDP)
+abbrev: DRDP
+docname: draft-mglt-add-rdp-02
 
 
 area: ART
@@ -9,7 +9,7 @@ wg: add
 kw: Internet-Draft
 cat: info
 
-coding: us-ascii
+coding: utf-8
 pi:
   rfcedstyle: yes
   toc: yes
@@ -34,400 +34,285 @@ author:
 
 --- abstract
 
-This document describes the DNS Resolver Discovery Protocol (RDP) that
-enables a DNS client to discover various available DNS resolving services
-instantiated as resolvers. These resolvers can be local and global. The
-discovery is primarily initiated by a DNS client, but a resolver may also
-inform the DNS client with other resolver services. 
+This document describes the DNS Resolver Discovery Protocol (DRDP) that enables a DNS client to discover various available local and global resolving service. 
+The discovery is primarily initiated by a DNS client, but a resolver may also inform the DNS client other resolving services are available and eventually preferred. 
 
 --- middle
 
 
 # Requirements Notation
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
-"SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
-"OPTIONAL" in this document are to be interpreted as described BCP 14
-{{!RFC2119}} {{!RFC8174}} when, and only when, they appear in all capitals,
-as shown here.
+{::boilerplate bcp14}
 
 # Introduction {#sec-intro}
 
-A DNS client can proceed to DNS resolution using various resolution
-services. These services can be instantiated by local or global resolver
-using a wide range of DNS transport protocols such as, for example,
-standard DNS {{!RFC1035}}, DNS over TLS{{!RFC7858}} or DNS over HTTPS
-{{!RFC8484}}. 
+A DNS client can proceed to DNS resolution using various resolving services. 
+These services can be local, global and can use a wide range of DNS transport protocols such as, for example, standard DNS {{!RFC1035}}, DNS over TLS{{!RFC7858}} or DNS over HTTPS {{!RFC8484}}. 
 
-The purpose of the DNS Resolving service Protocol (RDP) is to discover the
-various resolving services available to the DNS client so a selection
-process can apply. The information returned by RDP typically includes
-information related to the IP addresses, the transport protocols, the TLS
-parameters or the HTTP version. How the selection is performed is out of
-scope of this document.  
+The purpose of the DNS Resolving service Protocol (DRDP) is to discover these resolving services available to the DNS client so a selection process can be applied. 
 
-This document considers the resolver as a DNS resolving service noted rdns.
-The motivation for creating a new service is that "domain" is associated to
-port 53 as well as TCP and UDP and designates both the authoritative as
-well as the resoling service.  On the other hand the service "rdns" is
-expected to be limited to the DNS resolution service that can have various
-transport flavors including using different ports.
+DRDP adopts a hierarchical approach where available resolving domains are discovered first, followed by the iterative discovery of the resolving services within each resolving domain. 
 
+The discovery of the resolving domain an take multiple forms and may be provided via various ways. This document only describes how the resolving domain may be derived from the legacy IP address provided via the Recursive Name Server option {{!RFC3646}}. It is however envisioned that these resolving domain will be provided by multiple third party providers and as such a common format for such list is expected to enable interoperability. This document describes such format as well as a procedure to retrieve the resolving domain from such list. 
+
+When a discovery is performed within a resolving domain, RDP returns the identifier of the resolving service as well as information that is expected to be considered in the selection process. This includes information that characterises the resolving service such as for example IP addresses, the transport protocols, TLS parameters, HTTP version, presence of filtering service, associated authoritative domains... In addition to such parameters additional information that is expected to ease the selection is also included such as for example, when multiple resolving services are proposed, their associated preference by the operator. 
+
+How the selection is performed is out of scope of this document.  
 
 # Terminology
 
 DNS client
-: the client that sends DNS queries fro resolution. In this document the
-DNS client designates also the end entity that is collecting information
-about the available Resolving Services and then proceed to the selection of
-a subset them. The selection is processed according to the DNS client's
-policy. 
+: the client that sends DNS queries fro resolution. In this document the DNS client designates also the end entity that is collecting information about the available Resolving Services and then proceed to the selection of a subset them. The selection is processed according to the DNS client's policy. 
 
 Resolving Service
-: designates a service that receives DNS queries from a DNS client and
-resolves them. Resolving services can be instantiated in various ways, with
-different resolvers and different DNS transport for example. This document
-use rdn to designate all instances of resolving services within a domain.
-This document also use dns, dot and doh to designates the subset of
-instances to respectively implement DNS, DoT and DoH. 
+: designates a service that receives DNS queries from a DNS client and resolves them. A Resolving Service is implemented by one or multiple resolvers. 
 
-Resolving Service Instance
-: represents one way to implement the Resolving Service and terminate the
-DNS session with the DNS client. The resolving service instance is also
-designated as the resolver.    
+Resolver: 
+A resolver designates the software or hardware handling the DNS exchange. See {{?RFC7719}} for more details. 
 
 DNS transport
-: designates the necessary parameters a DNS client needs to establish a
-session with a Resolving Service. 
+: designates the necessary parameters a DNS client needs to establish a session with a Resolving Service. 
 
-rdns domain
-: a DNS domain that hosts resolving services. 
+Resolving Domain
+: a DNS domain that hosts one or multiple resolving services. 
 
 
-# RDP Requirements
+# DRDP Requirements
 
-This section lists the RDP requirements.
+This section lists the DRDP requirements.
 
-REQ 1: RDP MUST be able to list resolving services that are
-available to the DNS client. The resolving services can be available
-globally or locally and listing MUST be performed dynamically. 
+REQ 1: DRDP MUST be able to retrieve information associated to resolving services. 
+The selection process takes resolving services identities and associated parameters and proceed to the selection.  
+Any sort of resolver selection is outside the scope of DRDP. 
+
+REQ 2: The information associated to the resolving service MUST be certified by the resolving service operator / owner. 
+
+REQ 3: DRDP MUST be able to learn the resolving services to consider from various sources. The source can be the resolving service itself as well as pointers to a list of resolving service. 
+Such pointers may be provided by third trusted parties and DRDP MUST be able to retrieve the information form these pointers. 
+
+REQ 4: Information associated to the resolving services is intended to help the process of selection and that selection process is intended to match the end user or application policy. 
+The selection process may evolve over time and these pieces of information MUST be able to evolve over time. Information may carry some characteristics of a resolving service or hints that will help the selection. In particular an operator of multiple resolving service MUST be able to associate a preference to the proposed resolving services. To ease automation of the selection as well as to make multiple applications benefit from DRDP the information MUST be carried over a standardized format.   
+
+REQ 5: DRDP MUST be designed to be used indifferently by a DNS client using any DNS transport protocol (Do53, DoT, DoH, ...). However, DRDP SHOULD be able to restrict the information retrieved to a certain type of resolving service, i.e. Do53, DoT, DoH. 
  
-The necessary inputs for the resolving service instances may be of various
-form. Not all of them are expected to be in the scope of RDP and RDP limits
-its scope to parameters that are inherent to the resolving service
-instance. 
+REQ 7: DRDP deployment MUST NOT be disruptive for the legacy DNS client or infrastructure and legacy client SHOULD be able to incrementally include DRDP. 
 
-For example, an end user may simply willing to know which DNS resolver
-provides the fastest resolution. Such inputs are not inherent to a specific
-resolver and are out of scope of RDP. 
 
-Another example could be the activation of some services such as parental
-protection for example. While such parameter could potentially be gather
-toward RDP, discussion are left for future extensions of RDP, and the
-current proposal limits its scope on DNS transport parameters. 
 
-REQ 2: RDP MUST be able to return DNS transport parameters associated to
-each resolving service instance. RDP MAY be extended in the future to
-return additional parameter. 
+# Resolving Domains 
 
-The selection of the resolving service instances MAY take various form
-between fully automated to fully manual. This, in particularly includes
-interaction with the end user on a subset of the selection parameters as
-well as the ability for a resolving service operator to indicate a
-preference toward a resolving service instance. 
+The resolving domains may be collected via multiple ways, including a configuration or via DHCP Options {{I-D.btw-add-home}}. 
+This document is taking the approach where resolving domain may be provided in multiple ways by multiple parties. 
+DRDP is expected to proceed to the discovery based on the collected resolving domains. 
 
-REQ 3: RDP MUST return the parameters used for the selection in a standard
-format without room for interpretation to ease automation of the resolver
-instance selection. 
+Section {{id}} defines the resolving domain and positions resolving domain and resolving service identities. 
 
-REQ 4: RDP MUST consider that selection MAY involve interaction from the end
-user, and as such provide the ability that user friendly information MAY be
-displayed. 
+While handling multiple individual resolving domain remains feasible, it is expected that providing the ability of identifying list of resolving domains as well as a procedure to retrieve the individual resolving domains from that list will ease the management, configuration and interoperability between these third parties and DRDP clients. 
+Section {{list}} defines how to handle list of resolving domains. 
 
-REQ 4: RDP MUST provide means from a resolving service to indicate a
-preference among the available resolving service instances. 
+Finally, section {{ip2d}} defines a procedure to derive a resolving domain from the IP address provided by Recursive Name Server option {{!RFC3646}}. Such procedure is expected to leverage from the existing and legacy infrastructure.  
 
-The resolving service instances selection process MAY be performed over a
-subset of the available instances. In that case, collecting parameters of
-resolving service instances that are known not to match the policy is
-useless. 
+## Resolving Domain and Resolving Service Identity {#id}
 
-REQ 5: RDP SHOULD be able to narrow narrow down the discovery to a subset of
-resolving service instances matching certain criteria.
- 
-DNS is the common denominator among the envisioned resolving service
-instances. 
+A resolving service is identified by a FQDN such as resolver.example.com) and the domain part (example.com) is designated as the resolving domain. 
+Note that the hostname (resolver) is only considered as a way to distinguish different resolving services but it is not expected to carry any specific information that will be useful for the selection process.    
 
-REQ 6: RDP MUST be based on DNS messages. 
- 
-Information provided by RDP will be used for a selection and as such the
-collected information needs to be reliable. 
+The remaining of this section exposes the importance of the resolving domain for an end user as well as alternative ways to display this information to the end user. 
 
-REQ: RDP MUST provide authenticated information 
- 
-Finally, 
+The resolving domain is expected to be representative to the end user to of the brand or legal entity of the institution the end user sends its data to. 
+The end user is likely to select a given resolving domain based on the trust he puts into the associated legal entity. 
+The resolving domain follows some DNS encoding rules and as such may not be believed to be so user friendly. 
+On the other hand, the end user may also be familiar with that format and the use or a standardize format helps automation in the selection. 
+Typically, it might be ericsson.com or ericsson which is different from Ericsson (with appropriated police character and color) which would be more meaningful for the end user. 
+Note that a user interface may also use the resolving domain to derive more user friendly and additional specific information that will be presented to the user. 
+This could include for example additional RDAP queries, favicons of web sites that are shown to the end users. 
+What is presented to the end user is out of scope of this document, but the resolving domain can be used as the key.  
 
-REQ: RDP MUST be deployed without affecting legacy DNS client or
-infrastructure.   
 
-# RDP outputs
+The hostname part is only meaningful within the resolving domain. 
+While, it may carry some information that may be interpreted to the end user, the constraint provided by the DNS format may be too restricting. 
+As a result, it is expected that a more user friendly string might be associated with the hostname and that the hostname remain reserved for networking administrators.
 
-The identity of the resolving service instance (or resolver)  represents an
-important parameter. The choice of a resolver generally reflects the trust
-the end user which can hardly be inferred automatically and is likely to
-require an interaction with the end user, unless explicitly provided by the
-end user.  
-This document considers the resolver's FQDN resolver.example.com as its
-identifier. example.com designates the rdns domain  and resolver represents
-hostname.  
 
-a) The rdns domain is expected to be the part that will mostly be used by
-the end user as a way to select trust as these are expected to represent
-the brand or legal entity of the institution the end user sends its data
-to. The rdns domain follows some DNS encoding rules and as such may not be
-believed to be so user friendly. Typically, the rdns domain might be
-ericsson.com or ericsson which is different from Ericsson (with
-appropriated police character and color) which is probably what would be
-more meaningful for the end user. On the other hand, the end user may also
-be familiar with that format and the use or a standardize format helps
-automation in the selection. As a result, this document will assume that
-the rdns domain will reflect the legal entity administrating the resolver
-to the user. Note that a user interface may also use the rdns domain to
-derive more user friendly and additional specific information that will be
-presented to the user. This could include for example additional RDAP
-queries, favicons of web sites that are shown to the end users. What is
-presented to the end user is out of scope of this document, but the rdns
-domain can be used as the key.  
+## List of Resolving Domains {#list}
 
-b) The hostname part is only meaningful within the rdns domain. While, it may
-carry some information that may be interpreted to the end user, the
-constraint provided by the DNS format may be too restricting. As a result,
-it is expected that a more user friendly string might be associated with
-the hostname and that the hostname remain reserved for networking
-administrators.
+A resolving domain list is designated by a FQDN example.com and the resolving domains contained in that list are retrieved by sending a query of type PTR for b._dns.example.com. 
 
-Parameters associated to the DNS transport are the type of transport that is
-DNS, DoT or DoH as well as the necessary parameters to establish the
-session. This may include specific TLS parameters for DoT and DoH as well
-as specific HTTP versions for DoH. These parameters are expected to be
-identified in a standard way. 
-
-# Architecture Overview
-
-DNS based Service Discovery (DNS-SD) {{!RFC6763}} is a discovery protocol
-for services based on DNS messages. DNS-SD provides the ability to display
-user-friendly names in UTF-8 and uses a combination of DNS RRsets of type
-PTR, SRV  and TXT. The current document is largely inspired from this long
-time and already existing protocol. However, RDP differs from DNS SD in
-that DNS-SD discovers services within a specific domain (such as .local or
-.home.arpa for example) while RDP needs to discover the rdns domain as well
-as the resolving services (i.e. resolvers) associated to this domain. In
-addition, RDP is taking advantage of the latests development of SRVCB
-RRsets {{!I-D.ietf-dnsop-svcb-httpssvc}} which, among other things, enables
-to combine the SRV and TXT Rsets. While nothing prevents RDP to use SRV and
-TXT RRsets, RDP uses instead SVCB RRset as web browser are more likely to
-implement SVBC. The use of SRV is provided in the annex in case SVBC does
-not become standard or that the WG decides to use SRV RRsets instead. The
-status of these annex are purely a documentation and will be removed from
-teh final version. In any case, while DNS SD and RDP presents some strong
-similarities, it is not expect they are compatible. 
-
-The overall procedure is performed as described below:
-1. Discovery of the global and local available rdns domains 
-2. Discovery of the resolvers among each rdns domain.
-
-# Domain Discovery with RDP 
-
-## Global Domain
-
-The mechanism involves the creation of a special domain name rdns.arpa that
-will list the various rdns domains. This mechanism remains valid as long as
-the list of rdns domain name remains relatively limited. The number of rdns
-domain that can fit into a payload will depend on the length of the rnds
-domain, so rdns domains are expected to have limited length. However the
-compactness is not expected to match the one achieved for the root servers
-that are designated by a one character size identity. The reason for it is
-that the identity of the resolver is expected to carry some meaning to the
-DNS client as opposed to the root servers. 
-
-That said, a UDP packet of 4096 bytes is expected to contain a significant
-amount of resolvers. The number of open resolver is not expected to reach
-that limit and if so the list can be retrieved through TCP. 
 
 The zone file below is inspired from DNS-SD where b indicates a browsing
-domain, _rdns indicates the DNS resolving service and rdns.arpa. indicates
-the special domain. rdns domain_0, rnds_domain_n indicates the various rdns
-domains. The order of the rdns domain is irrelevant, and the zone
-administrator SHOULD regularly reorder them. The RRsets MUST be signed with
-DNSSEC.
+domain, _dns indicates the DNS resolving service, example.com designates the list of the resolving domains.  
+resolving domain_0, resolving_domain_n indicates the various resolving domains. 
+The order of the resolving domains is irrelevant, and the zone administrator SHOULD regularly reorder them. The RRsets MUST be signed with DNSSEC.
 
 ~~~
-b._rdns.rdns.arpa  PTR <rdns_domain_0>
+b._dns.example.com  PTR <resolving_domain_0>
 [...]
-b._rdns.rdns.arpa  PTR <rdns_domain_n>
+b._dns.example.com  PTR <resolving_domain_n>
 ~~~
+
+Using the DNS provides the advantage to retrieve the resolving domain without requiring other libraries than DNS as well as benefit from the DNS caching infrastructure including the use of the TTL. 
+
+
+An EDNS buffer size of 1232 bytes will avoid fragmentation on nearly all current networks. [](This is based on an MTU of 1280, which is required by the IPv6 specification, minus 48 bytes for the IPv6 and UDP headers.)
+Such size makes lists of a 100 names viable over UDP without fragmentation. Larger lists will require the DNS exchange to be performed over TCP. While there is no hard limits, downloading the full list every TTL may not be appropriated for very large lists where the ability to manage differences may be needed.
 
 ## Local Domain {#ip2d}
 
-An application such as an web browser has a DNS client that MAY be
-configured by the application vendor or the end user with an IP address.
-Note that the IP address MAY be provided by the system as well.  Similarly,
-a non negligible part of the systems the resolver is automatically provided
-by the network via the DNS Recursive Name Server option {{!RFC3646}} and
-designated by an IP address. In such cases, there is a need to derive the
-domain associated to that domain name. 
+The resolving domains that are local needs to be provisioned or advertised by the network. 
+With that resolving domain the DNS client could proceed to its resolving service selection. 
 
-In any of these cases, the IP address is used as a local input to proceed
-to a resolving service instances discovery and eventually select a more
-appropriated resolving service instance according to the end user policy.
-The rdns domain will be derived from the IP address by:
+Resolving service are currently configured or advertised via IP addresses rather than a FQDN as a DNS resolution would be needed to resolve the IP address. 
+More specifically, networks usually advertise the resolving service via a Recursive Name Server option {{!RFC3646}} that contains an IP address. 
+Similarly application usually configures their resolving services with IP addresses (8.8.8.8, 1.1.1.1, 9.9.9.9,...). 
+As a result, this section indicates a mechanism that would enable a DNS client to derive a resolving domain of a resolver from an IP address of an advertised resolver. The mechanism described here is expected to be used as an hint.
+
+The resolving domain will be derived from the IP address by:
  
 1. performing a reverse resolution 
-2. derive the rdns domain assuming the resulting FQDN is composed of a
-hostname and the rdns domain.  For example, if resolver.example.com is the
-resulting FQDN from the reverse resolution, then the rdns domain will be
-example.com. 
+2. assume the resulting FQDN is composed of a hostname appended to the resolving domain.  For example, if resolver.example.com is the resulting FQDN from the reverse resolution, then the rdns domain will be example.com. 
 
+In most cases local resolving services uses global IP address which does not limit the reverse resolution to an associated local resolver. 
+However the zone associated to the resolving domain might not be available globally and instead be restricted to the local network. 
+As a result, DNS client SHOULD perform DNS resolution associated to the local resolving domain using the local resolver, and resolver operator SHOULD publish the resolving domain zone to the global Internet.    
 
-# Resolvers Discovery 
+Legacy DNS client will not be impacted. 
+Upon receiving the IP address they will send their DNS queries to that IP address. 
+DRDP aware DNS client will derive the resolving domain and attempt to perform a discovery within the resolving domain. 
+
+If other mechanisms as used to advertise the resolving domains such as those described in {{?I-D.btw-add-home}}, and the resolving domain are different, the DNS client should perform DRDP with both resolving domains. 
+
+# Resolving Service Discovery 
 
 ## Discovery of all service instances {#all}
 
-Given a rdns domain example.com, a DNS client MAY request all possible
-resolving service instances with a query of type SVCB with the service
-_rdns. 
+Given a resolving domain example.com, a DNS client MAY request all possible resolving service instances with a query of type SVCB with the service _dns. 
 
-The example below presents the use of an AliasForm followed by a
-ServiceForm which allows an indirection. The Alias form is not madatory and
-instead only ServiceForm associated to _rdn.example.com could have been
-used instead. 
+The example below presents the use of an AliasForm followed by a ServiceForm which allows an indirection. 
+The Alias form is not madatory and instead only ServiceForm associated to _dn.example.com could have been used instead. 
 
-The SvcFieldPriority indicates the preference of the resolving service
-instance.  
+The SvcFieldPriority indicates the preference of the resolving service instance.  
 
-The SvcParamKey alpn MUST be present when TLS is used as its presence and
-value indicates the DNS transport. The abscenec of the alpn SvcParamKey
-indicates that DNS is served, alpn set to dot indicates DoT is served while
-h* indicates DoH is served. 
+The SvcParamKey alpn MUST be present when TLS is used as its presence and value indicates the DNS transport. 
+The absence of the alpn SvcParamKey indicates Do53, alpn set to dot indicates DoT is served while h* indicates DoH is served. 
+Note that the port value (53, 853, 443) is not used to determine teh DNS transport as non standard port MAY be used. The example below uses an non standard port 5353 for illustrative purpose.
 
 The SvcParamField ux is optional is provides an UTF-8 string that is
 expected to be displayed to the end user if needed. 
 
-The RRsets MUST be protected with DNSSEC and when alpn is provided a TLSA
-RRset MUST be present. 
-
-## Discovery of specific service instances
-
-In order to reduce the size of the messages, the DNS client MAY also prefer
-to query information of resolvers using a specific transport (DNS, DoT,
-DoH) that are designated as sub sets. A DNS client MAY list the the
-different subsets of that rdns domain with a PTR query. In our case the
-subsets are defined as _dns for DNS, _dot for DoT and _doh for DoH. All
-subsets MUST share the same rdns domain. 
-
-This redirection with a PTR RRset is mandatory to be specified in the rdns
-domain, but the DNS client MAY directly query the subsets if it has a
-previous knowledge of these subsets. 
-
-The currently defined subsets MAY be extended in the future. 
-
-One the DNS client is aware of the available subsets, it MAY select one or
-more subsets and proceed to the SRVCB resolution. 
-
-The same restriction as defined in section {{all}} apply. 
-
-Note that while the SvcFieldPriority indicates the priority within a
-subservice, this field MUST have a coherence across subservices. The
-priority provided SHOULD be coherent with the case of a _rnds SRVCB query
-of section {{all}}.
- 
- 
-The figure below illustrates  an example of zone file. RRSIG and TLSA have
-been omited for the purpose of clarity.
+The RRsets MUST be protected with DNSSEC and when alpn is provided a TLSA RRset SHOULD be present. These RRsets have been omitted for clarity. 
 
 ~~~
 ## Discovery of all service instances
-_rdns.example.com. 7200 IN SVCB 0 svc.example.com.
+_dns.example.com. 7200 IN SVCB 0 svc.example.com.
 svc.example.com.    7200 IN SVCB 12 ( svc0.example.net.
-                                      port="53" ux="Legacy Resolver" )
+                                      port="5353" ux="Legacy Resolver" )
 svc.example.com.    7200 IN SVCB 1 ( svc1.example.net.  alpn="dot" 
-                                      port="53" esniconfig="..." 
-                                      ux="Preferred Example's Choice" )
-                    
+                                      port="5353" esniconfig="..." 
+                                      ux="Preferred Example's Choice" )      
 svc.example.com.    7200 IN SVCB 3 ( svc2.example.net. alpn="h2"
-                                       port="53" esniconfig="..." ux= )
+                                       port="5353" esniconfig="..." ux= )
 svc.example.com.    7200 IN SVCB 2 ( svc3.example.net. alpn="h3"
+                                       port="5353" esniconfig="..." ux= )
+
+~~~
+
 
 ## Discovery of specific service instances
 
+To reduce the size of the messages, the DNS client MAY also prefer to query information of resolvers using a specific transport (DNS, DoT, DoH) that are designated as sub sets. 
+A DNS client MAY list the the different subsets of that resolving domain with a PTR query. 
+This document defines the following subsets _53._dns for DNS, _853._dns for DoT and _443.__dns for DoH. Other subsets MAY be defined in the future. A DNS client that does not understand a subset SHOULD ignore it and maybe proceed to the discovery as defined in {{all}}. 
+
+All subsets MUST share the same resolving domain and be listed with a PTR RRsets. The DNS client MAY NOT performed a DNS query of type PTR, for example, if it has a previous knowledge of the existence of the subset or if indicated by its policy. In this it MAY directly proceed to the SRVCB resolution. 
+
+The same restrictions as defined in section {{all}} apply. 
+
+Note that while the SvcFieldPriority indicates the priority within a subservice, this field MUST have a coherence across subservices. 
+The priority provided SHOULD be coherent with the case of a _dns SRVCB query of section {{all}}. 
+ 
+The figure below illustrates  an example of zone file. RRSIG and TLSA have been omited for the purpose of clarity.
+
+~~~
 ### Definition of the resolving service subsets
-_rdns.example.com PTR _domain.example.com
-_rdns.example.com PTR _dot.example.com
-_rdns.example.com PTR _doh.example.com
+_dns.example.com PTR _53._dns.example.com
+_dns.example.com PTR _853._dns.example.com
+_dns.example.com PTR _443._dns.example.com
 
 ### services instances per service subset
-_domain.example.com. 7200 IN SVCB 0 svc0.example.com.
+_53._dns.example.com. 7200 IN SVCB 0 svc0.example.com.
 svc0.example.com.    7200 IN SVCB 12 ( svc0.example.net.
-                                      port="53" ux="Legacy Resolver" )
-_dot.example.com.    7200 IN SVCB 0 svc1.example.com.
+                                      port="5353" ux="Legacy Resolver" )
+_853._dns.example.com.    7200 IN SVCB 0 svc1.example.com.
 svc1.example.com.    7200 IN SVCB 1 ( svc1.example.net.  alpn="dot" 
-                                      port="53" esniconfig="..." 
+                                      port="5353" esniconfig="..." 
                                       ux="Preferred Example's Choice" )
                     
-_doh.example.com.    7200 IN SVCB 0 svc4.example.net.
+_443_dns.example.com.    7200 IN SVCB 0 svc4.example.net.
 svc4.example.com.    7200 IN SVCB 3 ( svc2.example.net. alpn="h2"
-                                       port="53" esniconfig="..." ux= )
+                                       port="5353" esniconfig="..." ux= )
 svc4.example.com.    7200 IN SVCB 2 ( svc3.example.net. alpn="h3"
-                                      port="443" esniconfig="..."  
+                                      port="5353" esniconfig="..."  
                                       ux="Testing QUIC")
 ~~~
 
 
 Some notes:
 
-1. SVCB requires to mention the port. SVCB is a work in progress and we
-would like the port to be removed as port is not always mentioned in the
-scheme. That said, mentionnig a non necessary port could be feasible. 
-
-2. _domain uses SVCB but does not have TLS. While SVCB has been created
+1. _domain uses SVCB but does not have TLS. While SVCB has been created
 essentially for TLS based service, this does not appear to be mandatory. 
+2. Should we have some constraints regarding the SvcDomainName and QNAME ?
 
-3. _dot and _doh are seen  as services even if doh is using HTTPS.
+## TTL
 
 
-4. Should we have some constraints regarding the SvcDomainName ?
 
+## SvcParamKey 
+
+This section defines a set of SvcParamKey that MAY be use to carry the necessary informations for the selection process. 
+
+alpn
+:
+
+esniconfig
+:
+
+port
+:
+
+user-display
+: indicates a strings in UTF-8 that is expected to be representatuive to a potential end user. Though there is no retsriction in the scope of that string. The string is likely to represent the service within the resolving domain.
+            
+uri_template
+: designates the URI template for DoH. This key MUST NOT be present on non DoH services and MUST be ignored by the DNS client on non DoH resolving Services. 
+
+auth_domain
+: indicates the list of authoritative domain name the resolving service has strong relation with. It is expected that a resolver may prefer to perform DNS resolution over these domains to that specifci resolving service as to preserve its privacy. This information MUST be verified and validated.     
+            
+filetring
+: indicate sthe presence of a filtering service
+
+ip_subnet   
+: indicates a subnetwork restriction. This is mostly useful for resoolving services that are not globaly.
 
 
 # Resolver advertising other service sub type
 
-A resolver receiving a DNS request over a service sub type MAY be willing to
-advertise the DNS client that other sub service type are available. This is
-especially useful, when, for example, a resolver wants that the DNS resolver
-switches to other service sub types that are more secure. 
+A resolver receiving a DNS request over a service sub type MAY be willing to advertise the DNS client that other sub service type are available. 
+This is especially useful, when, for example, a resolver wants that the DNS resolver switches to other service sub types that are more secure. 
 
-In order to do so the resolver MAY provide in the additional data field the
-_rdns  SRVCB of ServiceForm.
+In order to do so the resolver MAY provide in the additional data field the _dns  SRVCB of ServiceForm.
 
 # Migration to service sub types
 
-The principle of the discovery mechanism is that the resolver indicates the
-available service sub types and let the DNS client chose which sub type it
-prefers. On the other hand, the resolver MAY also indicate a preference using
-the priority and weight fields however, there is no mechanisms that could
-permit an indirection from one service sub type to another service sub type.
-Redirection MAY especially be needed when a DNS client is using the dns53 sub
-type and the resolver would liek to upgrade the DNS client session to a more
-secure session. The MAY require a specific ERROR code that will request the DNS
-client to perform service discovery.  
+The principle of the discovery mechanism is that the resolver indicates the available service sub types and let the DNS client chose which sub type it prefers. 
+On the other hand, the resolver MAY also indicate a preference using the priority and weight fields.
+However, there is no mechanisms that could permit an indirection from one service sub type to another service sub type. 
+This document specifies that weight needs to be considered across sub types. 
+Redirection MAY especially be needed when a DNS client is using the Do53 and the resolver would like to upgrade the DNS client session to a more
+secure session. This MAY require a specific ERROR code that will request the DNS client to perform service discovery.  
 
-It is expected that domain sub service MUST always be provided to perform resolver
-discovery. In other words, resolver discovery MUST be available though the non
-confidential channels designated by the sub service type dns53. However, this
-does not mean that a resolver is expected to implement the dns53 sub type
-service for resolutions. The availability of the sub service types for
-resolution. If a resolver chose not to provide the dns53 sub service type, that
-service MUST NOT be pointed by the _domain.example.com search. 
+It is expected that DRDP MUST always be available via Do53. However, this does not mean that a resolver is expected to implement the Do53 sub type service for a resolving service. 
+If a resolving service provider chooses not to provide a resolving service using Do53, that service MUST NOT be pointed by the _53._dns.example.com search and MUST NOT provide _dns.example.com SRVCB RRsets with no SvcParamKey alpn.  
 
 
 # Security Considerations
@@ -538,21 +423,6 @@ traffic over web traffic should be considered as providing limited privacy.
 
 # IANA Considerations
 
-This document requests the IANA the creation of a new service name in the 
-Service Name and Transport Protocol Port Number Registry
-https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xml
-
-Fields Port Number, Transport Protocol, Assignee, Contact, Modification Date,
-Service Unauthorized Use Report, Assignment Notes are void.  
-
-~~~
-Service | Description    | Registration | Reference  
-Name    |                | Date         |           
---------+----------------+--------------+-----------
-rdns    | DNS resolution |  TBD1        | RFC-TBD   
-
-~~~
-
 This document requests the IANA the creation of the following underscored node names in the 
 Underscored and Globally Scoped DNS Node Names registry
 https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-14
@@ -560,9 +430,6 @@ https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-paramet
 ~~~
 RR Type | _NODE NAME | Reference 
 --------+------------+----------
-SRVCB   | _rdns      | RFC-TBD
-SRVCB   | _dot       | RFC-TBD
-SRVCB   | _doh       | RFC-TBD
 SRVCB   | _dns       | RFC-TBD
 ~~~
 
@@ -571,171 +438,28 @@ SRVCB   | _dns       | RFC-TBD
 SvcParamKey | NAME         | Meaning                     | Reference 
 ------------+--------------+-----------------------------+-----------
 7           | user-display | User friendly string (UTF8) | RFC-TBD
-            |              | to represent the resolver   |  
-~~~
-# Appendix
-
-## Resources using SRV RRsets
-
-### Discovery mechanism associated to one domain
-
-The discovery mechanism is intended to enable a DNS client to discover what
-are the resolvers options available as well as how to further use these
-resolvers. 
-
-The procedure is based on service discovery {{!RFC8145}} and the overall
-procedure consists in finding various instances of the service "rdns". The
-resolution service is designated as "rdns" and differs from the service
-"domain" defined by IANA. 
-
-In this document, the service "rdns" is associated to a domain such as
-example.com. This means that the discovery process is performed over a
-specific portion of the internet, and resolvers that have no relation to
-that domain are not expected to be found. It is expected that the domain
-may be provisioned as a configuration parameter in the DNS client. It is
-expected that the domain provides a good meaning of the administrative
-entity managing the resolver, as it reflects the trust/mistrust the end
-user puts in the resolution. This configuration parameters differs from the
-one that is currently provisioned and discussion on how to proceed to
-resolver discovery from a legacy provisioning is described in more details
-in {{ip2d}}.
-
-The DNS client then searches for the rdns service associated to the domain
-example.com by querying PTR RRsets associated to _rdns_udp.example.com. This
-query corresponds to the general case of DNS service discovery. While tcp is
-reserved for TCP only and DNS is not only running on top of TCP we use _udp as a
-representation of _srv. 
-
-The difference with service discovery is that the response is expected to
-return instances of the service type. These instances may offer completely
-different services, but the end user is expected to select them according to
-their human readable name. In our case, the rdns service type can be
-implemented into different sub services types that are in our cases (DOT, DOH
-DNS). DOT, DOH and DNS are only example and any other designation may have been
-provided. Possible ways to distinguish these services could have been to adopt
-a convention in the service instance names or to have standard value for the
-service names. We prefer not to take that path and remove any constraints on
-the service name as it usually appears to the end user and we want to leave it
-free to contain what is going to be meaningful for the end user. Typically,
-DOT, DOH or DNS are unlikely to be meaningful to the waste majority of the
-internet users. Instead we used the DNS-SD capabilities to specify sub services
-by prefixing with _dot, _doh and _dns53 the dns._udp service type.   
-
-
-~~~
-DNS client  -->    Resolver
-_rdns.example.com PTR ?
-
-            <--
-_rdns_udp.example.com PTR DOT._dot._sub._rdns._udp.example.com
-_rdns_udp.example.com PTR DOH._doh_sub._rdns._udp.example.com
-_rdns_udp.example.com PTR DNS._dns53_sub._rdns._udp.example.com
+            |              | to represent the resolver   | 
+            | uri_template | URI template                |  
+            | auth_domain  | Domains the resolving       |
+            |              | service is authoritative    |
+            | filetring    | Filetring services provided |
+            | ip_subnet    | 
 
 ~~~
 
-Note that "DOT", "DOH" and "DNS" are the strings that may be shown to the end
-user. The main difference with DNS-SD is that the sub type was initially
-designed so the end user can narrow down its search. More explicitly its
-purpose was to enable an end user to narrow down the search on services
-providing DNS resolution over HTTPS with _doh._sub._rdns._udp.example.com. The
-purpose was not to split a generic service into multiple sub types of services. 
-
-Note that the user interface is expected to interpret and present to the end
-user the different services by interpreting the _dot, _doh or _dns53 sub
-service types and easing the understanding of the end user. If the DNS client
-is implementing a specific configuration, it will also have to interprete the
-sub types according to the configuration of the end user.
-
-Now that the end user has the various services available ("DOH", "DOT" and
-"DNS") with there associated types, the selection can occur, and the DNS client
-can request additional information about the service itself to set up a session
-with the chosen service. In our case this is mostly the host name, ports, the
-ip address, the certificates, .... If the DNS client choses to use DoH, for
-example, it will request the SRV RRsets associated to that service.
-
-Note that in our case, the sub service type carries sufficient information and
-no additional information is needed. There is no need to request the TXT
-reccord. Note also that carrying the sub type into the TXT RRsets would not be
-appropriated as this is believe to be a sufficiently important information to
-prevent a DNS client to browse thought all the different service instances. 
-
-While the TXT RRset is not necessary now, it MAY contain additional information
-that may be usefull to the DNS client as well. 
-
-It is expected these exchanges are protected with DNSSEC as these could be
-performed over an untrusted channel as well as through semi trusted resolver.
-The additional section SHOULD also carry the necessary information to set up
-the session between the DNS client and the resolver. This includes the IP
-addresses (A and AAAA) RRsets, for services implemented over TLS the necessary
-security credentials (TLSA RRsets).   
-
 ~~~
-DNS client  -->    Resolver
-DOH._doh_sub._rdns._udp.example.com SRV ?
-            <--
-DOH._doh_sub_rdns.example.com SRV priority=0, weight=0, 
-                           port=443 host=resolver.example.com 
-DOH._doh_sub_rdns.example.com SRV priority=0, weight=1, 
-                           port=443 host=resolver.example.com 
-DOH._doh_sub_rdns.example.com RRSIG (SRV) <signature>
-resolver.example.com AAAA <ip6_address>
-resolver.example.com AAAA <ip6_address>
-resolver.example.com RRSIG (A) <signature>
-resolver.example.com TLSA <certificate>
-resolver.example.com RRSIG (TLSA) <signature>
+SvcParamValue for filetring
+
+
 ~~~
 
 
-### File example 
-Example of a file.
 
-~~~
-_rdns_udp.example.com PTR DOT._dot._sub._rdns._udp.example.com
-_rdns_udp.example.com PTR DOH._doh_sub._rdns._udp.example.com
-_rdns_udp.example.com PTR DNS._dns53_sub._rdns._udp.example.com
+# Acknowledgments
 
-_dot_sub_rdns.example.com PTR DOT._dot_sub_rdns._udp.example.com
-_doh_sub_rdns.example.com PTR DOH._doh_sub_rdns._udp.example.com
-_dns53_sub_rdns.example.com PTR DNS._dns53_sub_rdns._udp.example.com 
 
-DOT._dot_sub_rdns.example.com SRV port=443 host=dns.example.com
-DOT._dot_sub_rdns.example.com SRV port=53 host=dns.example.com
-DOH._dot_sub_rdns.example.com SRV port=443 host=dns-dot.example.com
-DNS._dns53_sub_rdns.example.com SRV port=53 host=dns53.example.com
+We would like thank Mirja Kühlewind as well as the GSMA IG for their comments. We also thank Ted Hardie and Paul Hoffman for their feed backs regarding the dns schemes for DoT and DoH.   
 
-dns.example.com AAAA
-dns.example.com TLSA
-dns.example.com RRSIG
-
-dns53.example.com AAAA
-dns53.example.com RRSIG 
-~~~
-
-### Resolver advertising other service sub type
-
-A resolver receiving a DNS request over a service sub type MAY be willing to
-advertise the DNS client that other sub service type are available. This is
-especially useful, when, for example, a resolver wants that the DNS resolver
-switches to other service sub types that are more secure. 
-
-In order to do so the resolver MAY provide in the additional data field the
-appropriated SRV RRsets. As an example, if the resolver wants to advertise the
-existence of resolver using dot or doh sub service type, the resolver would add
-the following RRsets. Additional RRSets such as A, AAAA or TLSA RRSets MAY also
-be added.  
-
-~~~
-DOH._doh._sub_rdns.example.com SRV priority=0, weight=0, 
-                                 port=443 host=resolver.example.com 
-DOH._doh._sub_rdns.example.com SRV priority=0, weight=1, 
-                                 port=443 host=resolver.example.com 
-DOH._doh._sub_rdns.example.com RRSIG (SRV) <signature>
-DOT._dot._sub_rdns.example.com SRV priority=0, weight=0, 
-                                 port=443 host=resolver.example.com 
-DOT._dot._sub_rdns.example.com SRV priority=0, weight=1, 
-                                 port=443 host=resolver.example.com 
-DOT._dot._sub_rdns.example.com RRSIG (SRV) <signature>
-~~~
 
 
 
